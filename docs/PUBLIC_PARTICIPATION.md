@@ -53,32 +53,27 @@ participant follows with `./forshor status --watch`. This bounded queue cannot a
 
 ## Rules enforced by GitHub
 
-For **zapatacomputing/forshor-submissions/main**, maintenance changes must use
-a PR and pass the `Maintenance checks` job from GitHub Actions on the current
-base. There are **zero required approving reviews**: maintainers can merge their own
-maintenance PRs. Maintenance checks run on every PR, including documentation
-changes, so a required check cannot remain absent because of a path filter.
-They are separate from the scientific Lean and Qualtran submission checks.
+Both **zapatacomputing/forshor-submissions/main** and
+**zapatacomputing/forshor-submissions/submission-results** block branch deletion
+and non-fast-forward pushes. The `ForShor preserve history` ruleset has no
+administrator or automation bypass.
 
-For **zapatacomputing/forshor-submissions/submission-results**, only the
-publishing automation's GitHub App is permitted to push. No users or teams are
-on the push allowlist. Disable force pushes and branch deletion on both
-branches, including for administrators. Three repository rulesets enforce this:
-one requires maintenance PRs/checks, one restricts archive updates to the App,
-and one prevents history rewrites/deletion with no exceptions, even for the App.
-There is no administrator bypass in any ruleset. Classic push restrictions
-alone would still let repository administrators write directly to the archive.
-Administrators can still edit GitHub
-settings or delete a repository; these settings do not replace independent backups.
+Ordinary direct pushes remain allowed for people and automation with repository
+Write access. No PR, approving review, required status check, or automation-only
+archive restriction is imposed. `Maintenance checks` still runs on main pushes
+and PRs, but does not gate a push. Keep Write/Admin access limited to trusted
+maintainers; public participants can fork and open PRs without upstream Write access.
+
+These rules preserve the branch's history, not every file in its latest commit:
+a normal commit can still remove files, with earlier versions retained for recovery.
+Administrators can also edit rules or delete the repository. Independent backups
+remain necessary. An archive correction must stay consistent with the published
+ledger; do not manually edit accepted records as a routine operation.
 
 The current publisher uses GitHub's Actions App. Its token gets explicit
 Contents Write only in the trusted publisher workflow. Verification gets
 Contents Read, no publishing secrets, and no Google identity token permission.
-GitHub restricts public fork tokens to read access; do not enable write tokens
-or secrets for fork PR jobs. App restrictions identify an App, not an individual
-workflow: the trusted main workflows and their permissions remain part of the
-security boundary. A separately installed publisher App can be selected with
-`--publisher-app SLUG --publisher-app-id ID` if required by GitHub or the organization's access model.
+Do not enable write tokens or secrets for fork PR jobs.
 
 Default workflow tokens are read-only and cannot approve PRs. Review the
 existing collaborator list with the repository owner; do not automatically
@@ -96,10 +91,14 @@ python3 scripts/ci/repository_security.py apply
 
 The script never changes visibility, saves the previous settings under ignored
 `artifacts/security/`, applies the rules through GitHub's API, and reads them
-back. It stops if the publisher App restriction is rejected; do not replace it
-with an administrator or human bypass. In that case configure an installed
-publisher App with repository-scoped Contents Write and keep its credentials
-only in trusted publication before continuing the release check.
+back. It only manages the named history ruleset; it does not change collaborators,
+workflow token permissions, other rulesets or branch contents. Inspect effective
+rules on both branches for any additional inherited restrictions.
+
+To recover a mistakenly deleted file, restore it from an earlier commit and make a
+new ordinary commit. Do not force-push the branch backward. If this ruleset itself
+needs rollback, use its recorded GitHub rule ID and the saved previous configuration
+under an explicit maintenance decision; re-read the resulting rules afterward.
 
 On GitHub Free, branch protection is only available for public repositories.
 Apply the protections and read them back whenever visibility changes; do not

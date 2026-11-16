@@ -10,46 +10,20 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-import re
 import subprocess
 
 REPOSITORY = 'zapatacomputing/forshor-submissions'
-CHECK = 'Maintenance checks'
-ACTION_APP_ID = 15368
 
 
-def plan(publisher_app='github-actions', publisher_app_id=ACTION_APP_ID):
-    if not re.fullmatch(r'[a-z0-9-]+', publisher_app):
-        raise ValueError('Expected a GitHub App slug')
-    if isinstance(publisher_app_id, bool) or not isinstance(publisher_app_id, int) or publisher_app_id < 1:
-        raise ValueError('Expected a positive GitHub App ID')
-    if publisher_app != 'github-actions' and publisher_app_id == ACTION_APP_ID:
-        raise ValueError('A custom publisher App needs its own --publisher-app-id')
-    def ruleset(name, refs, rules, bypass=None):
-        return {'name': name, 'target': 'branch', 'enforcement': 'active',
-                'conditions': {'ref_name': {'include': refs, 'exclude': []}},
-                'bypass_actors': bypass or [], 'rules': rules}
+def plan():
     return {
         'repository': REPOSITORY,
-        'workflowDefaults': {'default_workflow_permissions': 'read', 'can_approve_pull_request_reviews': False},
-        'publisherApp': {'slug': publisher_app, 'id': publisher_app_id},
-        'rulesets': [
-            # Separate from the writer bypass: even the publisher cannot delete
-            # a branch or force-update its history. Admins have no bypass.
-            ruleset('ForShor preserve history', ['refs/heads/main', 'refs/heads/submission-results'],
-                    [{'type': 'deletion'}, {'type': 'non_fast_forward'}]),
-            ruleset('ForShor main maintenance', ['refs/heads/main'], [
-                {'type': 'pull_request', 'parameters': {
-                    'required_approving_review_count': 0, 'dismiss_stale_reviews_on_push': False,
-                    'require_code_owner_review': False, 'require_last_push_approval': False,
-                    'required_review_thread_resolution': False}},
-                {'type': 'required_status_checks', 'parameters': {
-                    'strict_required_status_checks_policy': True,
-                    'required_status_checks': [{'context': CHECK, 'integration_id': ACTION_APP_ID}]}}]),
-            ruleset('ForShor archive writer', ['refs/heads/submission-results'],
-                    [{'type': 'update', 'parameters': {'update_allows_fetch_and_merge': False}}],
-                    [{'actor_id': publisher_app_id, 'actor_type': 'Integration', 'bypass_mode': 'always'}]),
-        ],
+        'rulesets': [{
+            'name': 'ForShor preserve history', 'target': 'branch', 'enforcement': 'active',
+            'conditions': {'ref_name': {'include': ['refs/heads/main', 'refs/heads/submission-results'], 'exclude': []}},
+            'bypass_actors': [],
+            'rules': [{'type': 'deletion'}, {'type': 'non_fast_forward'}],
+        }],
     }
 
 
@@ -85,18 +59,14 @@ def verify_ruleset(actual, expected):
         raise RuntimeError(f"{expected['name']}: GitHub did not enforce the declared rules and bypass actors")
 
 
-def apply(publisher_app, record, publisher_app_id=ACTION_APP_ID):
-    desired = plan(publisher_app, publisher_app_id)
+def apply(record):
+    desired = plan()
     base = f'repos/{REPOSITORY}'
     repository = api(base)
     if repository.get('private') or repository.get('visibility') != 'public':
         raise RuntimeError('Repository is private. Release protections are prepared; this command never changes visibility.')
     if not repository.get('permissions', {}).get('admin'):
         raise RuntimeError('Repository administrator access is required')
-    # The slug must identify an actual App; GitHub must also accept it as the
-    # archive restriction. Never replace a rejected App with a human bypass.
-    if api(f'apps/{publisher_app}').get('id') != publisher_app_id:
-        raise RuntimeError('Publisher App slug and ID do not match')
     original = {'repository': REPOSITORY, 'capturedAt': datetime.now(timezone.utc).isoformat(),
                 'workflowDefaults': api(base + '/actions/permissions/workflow'), 'rulesets': []}
     page = 1
@@ -120,24 +90,18 @@ def apply(publisher_app, record, publisher_app_id=ACTION_APP_ID):
         else:
             saved = api(base + '/rulesets', 'POST', ruleset)
         verify_ruleset(api(f"{base}/rulesets/{saved['id']}"), ruleset)
-    path = base + '/actions/permissions/workflow'
-    api(path, 'PUT', desired['workflowDefaults'])
-    if api(path) != desired['workflowDefaults']:
-        raise RuntimeError('Workflow defaults did not match after update')
     return {'status': 'verified', 'repository': REPOSITORY, 'previousSettings': str(record)}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['plan', 'apply'])
-    parser.add_argument('--publisher-app', default='github-actions')
-    parser.add_argument('--publisher-app-id', type=int, default=ACTION_APP_ID)
     parser.add_argument('--record', type=Path, default=Path('artifacts/security') /
                         ('previous-settings-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '.json'))
     args = parser.parse_args()
     try:
-        result = (plan(args.publisher_app, args.publisher_app_id) if args.command == 'plan'
-                  else apply(args.publisher_app, args.record, args.publisher_app_id))
+        result = (plan() if args.command == 'plan'
+                  else apply(args.record))
         print(json.dumps(result, indent=2))
     except (RuntimeError, ValueError, OSError) as error:
         parser.exit(1, f'{error}\n')
