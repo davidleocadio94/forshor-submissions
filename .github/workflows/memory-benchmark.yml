@@ -23,8 +23,8 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix:
-        case: [ptp-k4]
-        repeat: [1]
+        case: [pr107, pr109, pp-k8, pp-k3, ptp-k4, pp-k6, ptp-k6]
+        repeat: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -59,12 +59,12 @@ jobs:
           POLICY_MIRROR_TIMEOUT: '600'
         run: |
           unset PUBLISHER_URL PUBLISHER_TOKEN GH_TOKEN GITHUB_TOKEN
-          python3 ../benchmark/benchmarks/memory/observe.py --out ../results -- \
+          python3 ../benchmark/benchmarks/memory/observe.py --out "$GITHUB_WORKSPACE/results" -- \
             "$ENGINE_PYTHON" evaluation/intake_v2.py \
-            --lean-policy ../results/Policy.lean --login memory-benchmark --no-publish \
+            --lean-policy "$GITHUB_WORKSPACE/results/Policy.lean" --login memory-benchmark --no-publish \
             --tree "$STO_TREE" --forshor-tree "$FORSHOR_TREE" \
-            --workdir ../results/work --verification-out ../results/verification.json \
-            --out ../results/intake-result.json --stage-timeout 900 --mirror-timeout 600
+            --workdir "$GITHUB_WORKSPACE/results/work" --verification-out "$GITHUB_WORKSPACE/results/verification.json" \
+            --out "$GITHUB_WORKSPACE/results/intake-result.json" --stage-timeout 900 --mirror-timeout 600
       - name: Collect diagnostic files
         if: always()
         run: python3 benchmark/benchmarks/memory/collect.py results
