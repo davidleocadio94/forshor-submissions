@@ -1,0 +1,67 @@
+{
+  "verifier_commit": "356f3d518c0a5c15e370f06ae63c237b582ee040",
+  "forshor_commit": "349849e091fc05a4e80c99ae3511985faf3b8843",
+  "expected_epoch": "ab1f8887b1b50e56",
+  "cases": {
+    "pp-simple": {
+      "base_policy": "cases/pr107.json",
+      "base_source": "cases/pr107.lean",
+      "base_source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72",
+      "base_policy_digest": "6464cccd6636c9d55d0934aec0ccb158b1632787f9f7779cb7772f3bcf67afb6",
+      "pr_head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360",
+      "kind": "pp",
+      "variant": "simple",
+      "description": "k=4 at both thresholds; two bands at 1024 and 128"
+    },
+    "pp-heavy": {
+      "base_policy": "cases/pr107.json",
+      "base_source": "cases/pr107.lean",
+      "base_source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72",
+      "base_policy_digest": "6464cccd6636c9d55d0934aec0ccb158b1632787f9f7779cb7772f3bcf67afb6",
+      "pr_head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360",
+      "kind": "pp",
+      "variant": "heavy",
+      "description": "k=8 top and k=4 fallback; two bands at 1024 and 128"
+    },
+    "pp-heavy-256": {
+      "base_policy": "cases/pr107.json",
+      "base_source": "cases/pr107.lean",
+      "base_source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72",
+      "base_policy_digest": "6464cccd6636c9d55d0934aec0ccb158b1632787f9f7779cb7772f3bcf67afb6",
+      "pr_head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360",
+      "kind": "pp",
+      "variant": "heavy-256",
+      "description": "k=8 top and k=4 fallback; 254 redundant top bands preserve dispatch"
+    },
+    "ptp-simple": {
+      "base_policy": "cases/pr109.json",
+      "base_source": "cases/pr109.lean",
+      "base_source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7",
+      "base_policy_digest": "65073a449e01305f41efa1772788ded6656c94b46c9c5cf294fdf90adcbab2a5",
+      "pr_head": "23b412bba70f2ade71f899243b0fc08273dd38ca",
+      "kind": "ptp",
+      "variant": "simple",
+      "description": "k=4 at both thresholds; two bands at 1024 and 128"
+    },
+    "ptp-heavy": {
+      "base_policy": "cases/pr109.json",
+      "base_source": "cases/pr109.lean",
+      "base_source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7",
+      "base_policy_digest": "65073a449e01305f41efa1772788ded6656c94b46c9c5cf294fdf90adcbab2a5",
+      "pr_head": "23b412bba70f2ade71f899243b0fc08273dd38ca",
+      "kind": "ptp",
+      "variant": "heavy",
+      "description": "k=8 top and k=4 fallback; two bands at 1024 and 128"
+    },
+    "ptp-heavy-256": {
+      "base_policy": "cases/pr109.json",
+      "base_source": "cases/pr109.lean",
+      "base_source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7",
+      "base_policy_digest": "65073a449e01305f41efa1772788ded6656c94b46c9c5cf294fdf90adcbab2a5",
+      "pr_head": "23b412bba70f2ade71f899243b0fc08273dd38ca",
+      "kind": "ptp",
+      "variant": "heavy-256",
+      "description": "k=8 top and k=4 fallback; 254 redundant top bands preserve dispatch"
+    }
+  }
+}
