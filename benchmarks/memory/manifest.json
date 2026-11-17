@@ -1,0 +1,14 @@
+{
+  "verifier_commit": "5e037e0cdf45b59addef57376d7ee7ebcf2b7272",
+  "forshor_commit": "349849e091fc05a4e80c99ae3511985faf3b8843",
+  "expected_epoch": "ab1f8887b1b50e56",
+  "cases": {
+    "pr107": {"source": "cases/pr107.lean", "head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360", "source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72", "description": "Exact PR #107, PP, 77 bands including k=8"},
+    "pr109": {"source": "cases/pr109.lean", "head": "23b412bba70f2ade71f899243b0fc08273dd38ca", "source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7", "description": "Exact PR #109 (olsonjonny_sub2), PTP k=8/4"},
+    "pp-k8": {"source": "cases/pr107.lean", "bands_override": "[(1024, t1), (128, t3)]", "description": "PR #107's k=8 and k=4 tables, two bands; validity determined by unchanged verifier"},
+    "pp-k3": {"seed": "S707dd51bf951", "description": "PP seed, k=3, threshold 81"},
+    "ptp-k4": {"seed": "S80e6a121410d", "description": "PTP seed, k=4, threshold 522"},
+    "pp-k6": {"seed": "S00c49eff1f98", "description": "PP seed, k=6/2, thresholds 354/71"},
+    "ptp-k6": {"seed": "S7cb2f58aff1a", "description": "PTP seed, k=6/4, thresholds 2048/375"}
+  }
+}

@@ -1,0 +1,81 @@
+name: MIS-195 memory benchmark
+
+on:
+  push:
+    branches: [bench/mis-195-verification-memory-20261117]
+    paths:
+      - '.github/workflows/memory-benchmark.yml'
+      - 'benchmarks/memory/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mis195-memory-benchmark
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    name: '${{ matrix.case }} / repeat ${{ matrix.repeat }}'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        case: [ptp-k4]
+        repeat: [1]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: benchmark
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 5e037e0cdf45b59addef57376d7ee7ebcf2b7272
+          path: verifier
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned Lean
+        working-directory: verifier
+        run: ./scripts/ci/install_lean.sh
+      - name: Restore production engine environment
+        uses: ./verifier/.github/actions/policy-engine-environment
+        with:
+          source: verifier
+      - name: Prepare production Lean checkers and swap
+        uses: ./verifier/.github/actions/policy-lean-environment
+      - name: Prepare fixed policy and check source
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          "$ENGINE_PYTHON" benchmark/benchmarks/memory/prepare.py --case "$CASE" --verifier verifier --out results
+          python3 verifier/scripts/ci/policy_source.py results/Policy.lean
+      - name: Observe unchanged verification without publishing
+        working-directory: verifier
+        env:
+          LEAN_NUM_THREADS: '1'
+          POLICY_STAGE_TIMEOUT: '900'
+          POLICY_MIRROR_TIMEOUT: '600'
+        run: |
+          unset PUBLISHER_URL PUBLISHER_TOKEN GH_TOKEN GITHUB_TOKEN
+          python3 ../benchmark/benchmarks/memory/observe.py --out ../results -- \
+            "$ENGINE_PYTHON" evaluation/intake_v2.py \
+            --lean-policy ../results/Policy.lean --login memory-benchmark --no-publish \
+            --tree "$STO_TREE" --forshor-tree "$FORSHOR_TREE" \
+            --workdir ../results/work --verification-out ../results/verification.json \
+            --out ../results/intake-result.json --stage-timeout 900 --mirror-timeout 600
+      - name: Collect diagnostic files
+        if: always()
+        run: python3 benchmark/benchmarks/memory/collect.py results
+      - name: Retain benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: memory-${{ matrix.case }}-r${{ matrix.repeat }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            results/
+            !results/work/**
+            policy-bootstrap.json
