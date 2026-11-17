@@ -1,0 +1,146 @@
+{
+ "digest": "48201f39798a72a6d9c52c52bb112892663f2a16ff3beeeb92116a96f903e8e1",
+ "mode": "PhaseTripleProduct",
+ "board": "ptp",
+ "policy": {
+  "name": "forshor-printed-ptp",
+  "mode": "PhaseTripleProduct",
+  "bands": [
+   {
+    "threshold": 1024,
+    "mode": "PhaseTripleProduct",
+    "k": 3,
+    "point_order": [
+     "0",
+     "-2",
+     "-1",
+     "1",
+     "inf",
+     "1/2",
+     "-1/2"
+    ],
+    "operations": [
+     [
+      "phaseProduct",
+      0
+     ],
+     [
+      "addScaled",
+      0,
+      1,
+      -1,
+      1
+     ],
+     [
+      "addScaled",
+      0,
+      2,
+      1,
+      2
+     ],
+     [
+      "phaseProduct",
+      0
+     ],
+     [
+      "addScaled",
+      0,
+      1,
+      1,
+      0
+     ],
+     [
+      "addScaled",
+      0,
+      2,
+      -1,
+      2
+     ],
+     [
+      "addScaled",
+      0,
+      2,
+      1,
+      0
+     ],
+     [
+      "phaseProduct",
+      0
+     ],
+     [
+      "addScaled",
+      0,
+      1,
+      1,
+      1
+     ],
+     [
+      "phaseProduct",
+      0
+     ],
+     [
+      "addScaled",
+      0,
+      1,
+      -1,
+      0
+     ],
+     [
+      "addScaled",
+      0,
+      2,
+      -1,
+      0
+     ],
+     [
+      "phaseProduct",
+      2
+     ],
+     [
+      "addScaled",
+      2,
+      0,
+      1,
+      2
+     ],
+     [
+      "addScaled",
+      2,
+      1,
+      1,
+      1
+     ],
+     [
+      "phaseProduct",
+      2
+     ],
+     [
+      "addScaled",
+      2,
+      1,
+      -1,
+      2
+     ],
+     [
+      "phaseProduct",
+      2
+     ],
+     [
+      "addScaled",
+      2,
+      0,
+      -1,
+      2
+     ],
+     [
+      "addScaled",
+      2,
+      1,
+      1,
+      1
+     ]
+    ]
+   }
+  ]
+ }
+}
