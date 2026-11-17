@@ -62,6 +62,17 @@
       "kind": "ptp",
       "variant": "heavy-256",
       "description": "k=8 top and k=4 fallback; 254 redundant top bands preserve dispatch"
+    },
+    "pp-heavy-256-kernel": {
+      "base_policy": "cases/pr107.json",
+      "base_source": "cases/pr107.lean",
+      "base_source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72",
+      "base_policy_digest": "6464cccd6636c9d55d0934aec0ccb158b1632787f9f7779cb7772f3bcf67afb6",
+      "pr_head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360",
+      "kind": "pp",
+      "variant": "heavy-256",
+      "description": "Same 256-band policy; sorting theorem uses decide +kernel instead of decide to avoid elaborator recursion limit",
+      "kernel_sorted": true
     }
   }
 }

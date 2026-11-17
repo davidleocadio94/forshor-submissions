@@ -66,3 +66,20 @@ Three repeats test variability in this comparison. Passing these cases does not
 guarantee all permitted programs fit or establish that 256 is the right policy
 limit. The benchmark tests verification; publication-only duplicate/identity
 rules and per-account quotas are inspected separately, without publishing.
+
+## Targeted sorting-proof diagnostic
+
+The original six-case suite is frozen at commit
+`8cd5b2773734fb9ca8b2c25eb96b0b75eabfa606`, run `44201207153`.
+Its 256-band PP source hits Lean's recursion limit at `sorted := by decide`.
+The follow-up matrix runs only `pp-heavy-256-kernel`, three times: identical
+tables, thresholds and canonical policy digest, replacing that one sorting proof
+with `decide +kernel`, already used by the same template for table proofs. This
+does not disable kernel checking or change any verifier/library/engine input.
+It tests whether a memory/time restriction also appears after the source proof
+obstacle. Keep the original failures in all reports.
+
+Acceptance is determined from `intake-result.json` and `observations.json`, not
+the GitHub job's green/red status. The original console `tee` pipeline did not
+propagate a verifier refusal to the job exit code. This follow-up explicitly
+enables `pipefail`; original artifacts still record refusals and exit code 1.

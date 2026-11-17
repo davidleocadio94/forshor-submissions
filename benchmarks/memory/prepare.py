@@ -47,6 +47,9 @@ checked = eng.tables.Policy.from_json(policy)
 sys.path.insert(0, str(root / 'evaluation/starter/pack/harness'))
 import policy_to_template
 source = policy_to_template.template_text(checked, lib='ForShor')
+if case.get('kernel_sorted'):
+    assert source.count('  sorted := by decide\n') == 1
+    source = source.replace('  sorted := by decide\n', '  sorted := by decide +kernel\n')
 from scripts.ci.policy_source import validate
 validate(source)
 counts = {

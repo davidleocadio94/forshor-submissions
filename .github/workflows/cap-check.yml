@@ -23,7 +23,7 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix:
-        case: [pp-simple, ptp-simple, pp-heavy, ptp-heavy, pp-heavy-256, ptp-heavy-256]
+        case: [pp-heavy-256-kernel]
         repeat: [1, 2, 3]
     steps:
       - name: Record benchmark start
@@ -60,6 +60,7 @@ jobs:
           POLICY_STAGE_TIMEOUT: '900'
           POLICY_MIRROR_TIMEOUT: '600'
         run: |
+          set -euo pipefail
           unset PUBLISHER_URL PUBLISHER_TOKEN GH_TOKEN GITHUB_TOKEN
           python3 ../benchmark/benchmarks/memory/observe.py --out "$GITHUB_WORKSPACE/results" \
             --deadline-seconds "$(( 1800 - ($(date +%s) - BENCH_START_EPOCH) - 90 ))" -- \
