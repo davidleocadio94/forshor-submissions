@@ -20,8 +20,9 @@ large integers are used. Table correctness is checked by the production Python
 parser, then the production converter emits ordinary Lean proofs. The unchanged
 full verifier determines acceptance. A failure is retained, not edited away.
 The original #107/#109 source and canonical policy digests bind the input tables.
-All six files are regenerated, so they are not exact-source PR replays; those
-were already measured three times in run 44179672801.
+All six files are regenerated. `ptp-heavy` reproduces #109 byte-for-byte; the
+other five are derived cases. Exact #107/#109 source replays were already
+measured three times in run 44179672801.
 
 `manifest.json` pins current verifier `356f3d518c0a5c15e370f06ae63c237b582ee040`,
 ForShor `349849e091fc05a4e80c99ae3511985faf3b8843`, and the unchanged scientific
