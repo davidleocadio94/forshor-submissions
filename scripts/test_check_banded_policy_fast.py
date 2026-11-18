@@ -120,3 +120,26 @@ def test_fast_mode_names_a_failed_threshold_rule_with_the_python_mirror(monkeypa
 def test_a_policy_that_obeys_the_threshold_rule_has_no_python_failure():
     for p in PROVED:
         assert cbp.threshold_failure_py(p.values[0], 2048) is None, p.id
+
+
+@pytest.mark.parametrize('stage,outcome', [('memory', 'killed: memory 12.04 GB > cap 12.0 GB'),
+                                          ('timeout', 'killed: timeout 900 s')])
+def test_replay_guard_kills_keep_their_stage(monkeypatch, tmp_path, stage, outcome):
+    class GuardRun(FakeRun):
+        def __call__(self, cmd, **kw):
+            if cmd[:3] == ['lake', 'build', cbp.CERT_MOD]:
+                return subprocess.CompletedProcess(cmd, 0, '', '')
+            if '--log' in cmd:
+                Path(cmd[cmd.index('--log') + 1]).write_text(json.dumps({'outcome': outcome}))
+                return subprocess.CompletedProcess(cmd, 1, '', 'compiler noise\n' * 500)
+            return super().__call__(cmd, **kw)
+
+    monkeypatch.setattr(cbp.subprocess, 'run', GuardRun(''))
+    policy, record = tmp_path / 'policy.json', tmp_path / 'record.json'
+    policy.write_text(json.dumps(PP_POLICY))
+    code = cbp.main([str(policy), '--target-width', '2048', '--widths', 'exact', '--fast',
+                     '--workdir', str(tmp_path / 'work'), '--out', str(record)])
+    rejection = json.loads(record.read_text())['rejection']
+    assert code == 1
+    assert rejection['stage'] == stage
+    assert rejection['reason'] == outcome

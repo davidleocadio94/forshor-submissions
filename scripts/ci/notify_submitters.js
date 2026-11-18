@@ -1,10 +1,10 @@
 'use strict';
 
-// Trusted-main code only. Tells a submission's author how their verification ended.
+// Trusted-main code only. Tells a submission's author where verification stands.
 //
-// Accepted submissions are reported by pr_publication.js after publication. This module reports everything else that
-// ends a verification: a REJECTED policy (the verifier gave a verdict), and a run that COULD NOT COMPLETE (a tool or the
-// runner failed, a limit was reached, the run was cancelled: not a verdict on the policy).
+// Accepted submissions are reported by pr_publication.js after publication. This module updates a separate verification
+// status comment: queued, verifying, verified, a rejected policy, or a run that could not complete. Limits and runner
+// failures are not mathematical verdicts; passing verification alone does not claim publication.
 //
 // Trust: the pull request, its head commit and its author come from the GitHub API and the workflow_run event, never from
 // the uploaded artifact. The artifact is DATA: it is parsed as JSON, only `status`, `kind` and the `checks` names and
@@ -23,9 +23,8 @@ const RESULT_FILE = 'artifacts/table-generation-submission-result.json';
 const MAX_RESULT_BYTES = 1000000;
 const MAX_REASON_CHARS = 1500;
 const MAX_REASON_LINES = 25;
-// The conclusions of a verification run that this workflow reports. `success` belongs to the publisher; `skipped` and
-// `action_required` are not an outcome of the submission.
-const REPORTED = new Set(['failure', 'timed_out', 'cancelled', 'startup_failure']);
+// `success` means verification passed, not that publication succeeded. `skipped` and `action_required` are not outcomes.
+const REPORTED = new Set(['success', 'failure', 'timed_out', 'cancelled', 'startup_failure']);
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const SHA = /^[a-f0-9]{40}$/;
 // How the verifier words a changed-files rule it enforced (a verdict on the pull request). Any other failure of that check is a tool failure.
@@ -35,6 +34,7 @@ const CHANGED_FILES_VERDICTS = ['only TableGeneration/Submission/Policy.lean', '
 const NOT_A_VERDICT = new Set(['trees', 'verification', 'verifier exception']);
 // Mirror/intake stages that are a limit or an infrastructure fault, not a mathematical rejection.
 const LIMIT_STAGES = new Set(['timeout', 'harness', 'killed', 'epoch', 'publisher']);
+const PROOF_STAGES = new Set(['forshor', 'check', 'threshold', 'widths', 'cert', 'replay', 'audit', 'mirror', 'axiom dependencies']);
 
 // What each check or stage means, in plain words. Anything not listed is shown by its own (sanitised) name.
 const STAGES = {
@@ -49,7 +49,7 @@ const STAGES = {
   check: "A band does not meet STO's table contract.",
   threshold: 'A threshold is too low: a band must shrink the width wherever it is used.',
   widths: 'A declared width is below the exact width.',
-  cert: "The Lean kernel certificate did not build: a table, a threshold or the ladder is not valid.",
+  cert: "The Lean kernel certificate could not be built.",
   replay: "The trusted kernel replay did not accept the certificate.",
   audit: 'The axiom or statement audit did not pass.',
   mirror: "The STO mirror's evidence does not hold for this policy.",
@@ -101,6 +101,12 @@ function classify({ conclusion, result }) {
   if (!failed.length) return { outcome: 'incomplete', cause: 'no_result' };
   const stage = cleanName(failed[0].name);
   const details = String(failed[0].details ?? '');
+  // Older verifier receipts can report a guard kill under replay/cert instead
+  // of the new memory/timeout stage. Do not mistake those for a failed proof.
+  if (stage === 'memory' || /killed: memory [\d.]+ G(?:i)?B > cap [\d.]+ G(?:i)?B/.test(details))
+    return { outcome: 'incomplete', cause: 'memory', stage, reason: details };
+  if (stage === 'timeout' || /killed: timeout [\d.]+ s/.test(details))
+    return { outcome: 'incomplete', cause: 'timed_out', stage, reason: details };
   if (NOT_A_VERDICT.has(stage)) return { outcome: 'incomplete', cause: 'tool', stage, reason: details };
   if (stage === 'changed files' && !CHANGED_FILES_VERDICTS.some(prefix => details.startsWith(prefix))) return { outcome: 'incomplete', cause: 'tool', stage, reason: details };
   if (LIMIT_STAGES.has(stage)) return { outcome: 'incomplete', cause: 'limits', stage, reason: details };
@@ -118,6 +124,16 @@ const CAUSES = {
 };
 
 const markerOf = (headSha, outcome) => `<!-- forshor-notify:${headSha}:${outcome} -->`;
+const statusMarkerOf = headSha => `<!-- forshor-status:${headSha} -->`;
+
+async function progressOf(github, context, run) {
+  if (run.status === 'completed') return run.conclusion === 'success' ? 'verified' : null;
+  const { data } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+    ...context.repo, run_id: run.id, attempt_number: run.run_attempt, per_page: 100,
+  });
+  return data.jobs.some(j => j.name === 'Verify submission with Lean' && j.status === 'in_progress')
+    ? 'verifying' : 'queued';
+}
 
 /**
  * The comment for a rejected submission or a run that could not complete. Nothing here is taken from the artifact except the
@@ -129,10 +145,27 @@ function buildComment({ outcome, login, headSha, runUrl, stage, reason, cause })
   const marker = markerOf(headSha, outcome);
   const text = reason ? neutralize(reason) : '';
   const fenced = text ? `\n\`\`\`text\n${text}\n\`\`\`\n` : '';
+  if (['queued', 'verifying', 'verified'].includes(outcome)) {
+    const titles = { queued: 'Queued — waiting for verification', verifying: 'Verifying', verified: 'Verification passed' };
+    const messages = {
+      queued: 'your submission is waiting for an available verification slot. No action is needed.',
+      verifying: 'your submission is being prepared and checked.',
+      verified: 'Lean verification passed. Follow the **Estimate resources with Qualtran and publish results** check on this PR for publication status.',
+    };
+    return `${marker}\n### ${titles[outcome]}\n\n${hello}${messages[outcome]}\n\nCommit: \`${sha7(headSha)}\`. `
+      + `Follow progress here or with \`./forshor status --watch\`.\n\n[Verification run](${runUrl})\n`;
+  }
+  if (cause === 'memory') {
+    return `${marker}\n### Stopped: memory limit reached\n\n`
+      + `${hello}verification for commit \`${sha7(headSha)}\` reached the memory limit. **This is not a verdict on your policy.**\n\n`
+      + "We're working towards supporting submissions that need more memory.\n"
+      + `${fenced}\nYou do not need to rewrite your policy solely because of this message. `
+      + `A maintainer can retry verification when more capacity is available.\n\n[Verification run](${runUrl})\n`;
+  }
   if (outcome === 'rejected') {
     const label = cleanName(stage);
     const what = STAGES[label] || `The check named "${neutralize(label, { chars: 60, lines: 1 })}" did not pass.`;
-    return `${marker}\n### Submission not accepted\n\n`
+    return `${marker}\n### ${PROOF_STAGES.has(label) ? 'Proof check failed' : 'Submission not accepted'}\n\n`
       + (label === 'summary'
         ? `${hello}commit \`${sha7(headSha)}\` was not accepted because its optional summary file breaks a rule. Your policy itself was not judged.\n\n`
         : `${hello}your policy did not pass verification for commit \`${sha7(headSha)}\`.\n\n`)
@@ -141,14 +174,14 @@ function buildComment({ outcome, login, headSha, runUrl, stage, reason, cause })
       + '`./forshor check` runs the same checks on your machine, and `./forshor status` follows a hosted run. Published results are unchanged.\n\n'
       + `[Verification run](${runUrl})\n`;
   }
-  return `${marker}\n### Verification could not complete\n\n`
+  return `${marker}\n### ${cause === 'timed_out' ? 'Stopped: time limit reached' : 'Verification could not complete'}\n\n`
     + `${hello}the automated check for commit \`${sha7(headSha)}\` did not finish. **This is not a verdict on your policy.** ${CAUSES[cause] || CAUSES.no_result}\n${fenced}\n`
     + `You do not need to change anything: the run can be re-run from [its page](${runUrl}) by a maintainer. `
     + `If you hear nothing within an hour, open an [issue](https://github.com/${REPOSITORY}/issues). Published results are unchanged.\n`;
 }
 
 /** One comment per head commit and outcome: found by its marker and updated in place, never duplicated; an identical body is left alone. */
-async function upsert({ github, context, prNumber, marker, body }) {
+async function upsert({ github, context, prNumber, marker, body, existingOnly = false }) {
   const comments = await github.paginate(github.rest.issues.listComments, {
     ...context.repo, issue_number: prNumber, per_page: 100,
   });
@@ -157,6 +190,7 @@ async function upsert({ github, context, prNumber, marker, body }) {
     if (existing.body !== body) await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
     return 'updated';
   }
+  if (existingOnly) return 'skipped';
   await github.rest.issues.createComment({ ...context.repo, issue_number: prNumber, body });
   return 'created';
 }
@@ -174,16 +208,17 @@ async function inspect({ github, context, core }) {
     throw new Error('Unexpected source verification workflow');
   core.setOutput('process', 'false');
   core.setOutput('download', 'false');
-  if (!REPORTED.has(event.conclusion)) {
-    core.notice(`Conclusion ${event.conclusion}: nothing for this workflow to report.`);
-    return;
-  }
   const { data: run } = await github.rest.actions.getWorkflowRunAttempt({
     ...context.repo, run_id: event.id, attempt_number: event.run_attempt,
   });
   if (run.id !== event.id || run.run_attempt !== event.run_attempt || run.event !== event.event
-      || run.path !== event.path || run.head_sha !== event.head_sha || run.conclusion !== event.conclusion)
+      || run.path !== event.path || run.head_sha !== event.head_sha
+      || (context.payload.action === 'completed' && run.conclusion !== event.conclusion))
     throw new Error('Source workflow identity changed');
+  if (run.status === 'completed' && !REPORTED.has(run.conclusion)) {
+    core.notice(`Conclusion ${run.conclusion}: nothing for this workflow to report.`);
+    return;
+  }
   let pr = null;
   let refusal = null;
   try {
@@ -201,16 +236,18 @@ async function inspect({ github, context, core }) {
     refusal = error.message;
   }
   const { data: pull } = await github.rest.pulls.get({ ...context.repo, pull_number: pr.number });
-  if (pull.state !== 'open' || pull.merged || pull.head?.sha !== pr.headSha
+  if ((pull.state !== 'open' && run.conclusion !== 'success') || pull.merged || pull.head?.sha !== pr.headSha
       || pull.base?.ref !== 'main' || pull.base?.repo?.full_name !== REPOSITORY) {
     core.notice('The pull request moved on or was closed; no notification.');
     return;
   }
+  const progress = refusal ? null : await progressOf(github, context, run);
   fs.writeFileSync(SOURCE_FILE, JSON.stringify({
     run: { id: run.id, run_attempt: run.run_attempt, conclusion: run.conclusion }, pr, author: pull.user?.login ?? null, refusal,
+    ...(progress ? { progress } : {}),
   }));
   core.setOutput('process', 'true');
-  core.setOutput('download', refusal ? 'false' : 'true');
+  core.setOutput('download', refusal || progress ? 'false' : 'true');
   core.setOutput('artifact', `table-generation-submission-${run.id}-${run.run_attempt}`);
 }
 
@@ -228,6 +265,7 @@ function readResult(core) {
 function compose({ source, result }) {
   const base = { login: source.author, headSha: source.pr.headSha, runUrl: attemptUrl(source.run) };
   if (source.refusal) return buildComment({ ...base, outcome: 'rejected', stage: 'changed files', reason: source.refusal });
+  if (source.progress) return buildComment({ ...base, outcome: source.progress });
   const verdict = classify({ conclusion: source.run.conclusion, result });
   return buildComment({ ...base, ...verdict });
 }
@@ -235,9 +273,35 @@ function compose({ source, result }) {
 async function post({ github, context, core }) {
   const source = JSON.parse(fs.readFileSync(SOURCE_FILE, 'utf8'));
   if (!Number.isSafeInteger(source.pr?.number) || !SHA.test(source.pr?.headSha || '')) throw new Error('Invalid notification source');
-  const body = compose({ source, result: source.refusal ? null : readResult(core) });
-  const marker = body.slice(0, body.indexOf('\n'));
-  const action = await upsert({ github, context, prNumber: source.pr.number, marker, body });
+  // Downloading an artifact can take time. Never report a superseded attempt,
+  // a moved PR head, or stale queued/running state after verification finishes.
+  const { data: current } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: source.run.id });
+  const { data: pull } = await github.rest.pulls.get({ ...context.repo, pull_number: source.pr.number });
+  if (current.id !== source.run.id || current.path !== SOURCE_WORKFLOW || current.event !== 'pull_request'
+      || current.run_attempt !== source.run.run_attempt || current.head_sha !== source.pr.headSha
+      || pull.head?.sha !== source.pr.headSha || pull.merged
+      || pull.base?.ref !== 'main' || pull.base?.repo?.full_name !== REPOSITORY
+      || (pull.state !== 'open' && source.progress !== 'verified')) {
+    core.notice('Submission moved on; no stale notification.');
+    return;
+  }
+  const { data: runs } = await github.rest.actions.listWorkflowRuns({
+    ...context.repo, workflow_id: 'table-generation-submission.yml', head_sha: source.pr.headSha,
+    event: 'pull_request', per_page: 100,
+  });
+  if (runs.workflow_runs.some(r => r.id > current.id && r.head_sha === source.pr.headSha)) {
+    core.notice('A newer verification run owns this commit; no stale notification.');
+    return;
+  }
+  if (source.progress && source.progress !== 'verified') {
+    if (current.status === 'completed') return;
+    source.progress = await progressOf(github, context, current);
+  } else if (current.status !== 'completed' || current.conclusion !== source.run.conclusion) {
+    return;
+  }
+  const marker = statusMarkerOf(source.pr.headSha);
+  const body = `${marker}\n${compose({ source, result: source.refusal || source.progress ? null : readResult(core) })}`;
+  const action = await upsert({ github, context, prNumber: source.pr.number, marker, body, existingOnly: pull.state !== 'open' });
   core.info(`Notification ${action} on pull request #${source.pr.number}.`);
 }
 
@@ -258,4 +322,4 @@ function main(argv) {
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { mention, neutralize, cleanName, classify, buildComment, markerOf, upsert, inspect, post, compose, attemptUrl, REPORTED };
+module.exports = { mention, neutralize, cleanName, classify, buildComment, markerOf, statusMarkerOf, progressOf, upsert, inspect, post, compose, attemptUrl, REPORTED };

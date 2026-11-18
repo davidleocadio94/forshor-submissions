@@ -91,6 +91,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
+from memcap import limit_rejection  # noqa: E402
 from policy_json_to_lean import PolicyError, ladder_of, render  # noqa: E402
 
 INST = Path("TableGeneration/RecursiveCost/BandedPolicy/Instances")
@@ -379,6 +380,9 @@ def main(argv=None) -> int:
                        work, a.timeout + 60)
             mem = json.loads(memlog.read_text()) if memlog.stat().st_size else {}
             rec["seconds"]["replay:" + mod.rsplit(".", 1)[-1]] = s
+            stopped = limit_rejection(mem)
+            if stopped:
+                raise Reject(*stopped, json.dumps(mem))
             lines = p.stdout.splitlines()
             if f"AF_TRUSTED_{nonce}" not in lines:
                 raise Reject("replay", f"{mod}: no trusted output ({mem.get('outcome')})", (p.stdout + p.stderr)[-4000:])

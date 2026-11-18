@@ -9,6 +9,14 @@ spec.loader.exec_module(memcap)
 
 
 class LinuxMemoryTests(unittest.TestCase):
+    def test_limit_classification_comes_from_the_guard_outcome(self):
+        for stage, outcome in (("memory", "killed: memory 12.04 GB > cap 12.0 GB"),
+                               ("timeout", "killed: timeout 900 s")):
+            self.assertEqual(memcap.limit_rejection({"outcome": outcome}), (stage, outcome))
+        for record in ({}, {"outcome": "finished", "returncode": 1}, {"outcome": None},
+                       {"outcome": "finished", "stderr": "killed: memory 12.04 GB > cap 12.0 GB"}):
+            self.assertIsNone(memcap.limit_rejection(record))
+
     def test_cap_counts_resident_and_swapped_pages(self):
         status = 'Name:\tlean\nVmRSS:\t1024 kB\nVmSwap:\t512 kB\n'
         with patch.object(memcap.sys, 'platform', 'linux'), patch.object(Path, 'read_text', return_value=status):

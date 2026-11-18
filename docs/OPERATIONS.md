@@ -14,6 +14,20 @@ independent queues, not a scheduler that moves work between them. Publication
 uses a separate single queue with up to 100 waiting jobs. Waiting does not hold
 a runner. All jobs still share the organization's overall Actions concurrency.
 
+The trusted *Notify Submitters* workflow updates a verification status comment on the PR
+when the source workflow is requested, starts, and completes. It reads the verification
+job's status to distinguish queued work from active preparation/checking. The CLI also
+reads the job status on each poll. GitHub does not send the `requested` workflow event
+for reruns; while a rerun waits, use `./forshor status --watch` or its Actions page.
+These views report the state, not a queue position or ETA. Delayed notifications recheck
+the current PR head, run and attempt before updating the comment.
+
+A memory guard stop is reported as **Stopped: memory limit reached**, with the explanation
+**We're working towards supporting submissions that need more memory.** It is not a proof
+failure. Both policy checkers preserve the guard's memory/timeout reason before compiler
+diagnostics are truncated. A runner death without a readable result remains an unknown
+verification failure. Publication success and failure keep their separate publisher comment.
+
 Verification has a **60-minute job timeout**, shared by setup, ForShor, and
 the STO mirror. The mirror also has a 10-minute overall limit. The
 trusted Qualtran/archive/publication job has a **40-minute job timeout**.

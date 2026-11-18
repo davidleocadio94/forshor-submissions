@@ -568,6 +568,71 @@ class PublicationIdentity(unittest.TestCase):
             cli.validate_pr({'head': {'sha': 'b' * 40}}, 'a' * 40)
 
 
+class VerificationFeedback(unittest.TestCase):
+    def setUp(self):
+        self.submission = {'pr': 12, 'head': 'a' * 40, 'url': 'https://github.com/example/pull/12'}
+        self.verification = {'id': 123, 'run_attempt': 2, 'path': cli.VERIFIER, 'event': 'pull_request',
+                             'status': 'completed', 'conclusion': 'failure', 'html_url': 'https://github.com/example/actions/runs/123'}
+        self.metadata = {'repository': cli.REPO, 'pr_number': '12', 'head_sha': 'a' * 40, 'run_id': '123', 'run_attempt': '2'}
+
+    def test_guard_stops_and_proof_failures_have_distinct_messages(self):
+        for stage, detail, expected in (
+            ('memory', 'killed: memory 12.04 GB > cap 12.0 GB', 'Stopped: memory limit reached'),
+            ('replay', 'no trusted output (killed: memory 10.14 GB > cap 10.0 GB)', 'Stopped: memory limit reached'),
+            ('timeout', 'stage deadline', 'Stopped: time limit reached'),
+            ('cert', 'killed: timeout 900 s', 'Stopped: time limit reached'),
+            ('cert', 'type mismatch', 'Proof check failed'),
+        ):
+            with self.subTest(stage=stage, detail=detail):
+                result = {'status': 'failure', 'checks': [{'name': stage, 'status': 'failure', 'details': detail}]}
+                message = cli.hosted_failure(self.verification, result)
+                self.assertIn(expected, message)
+                self.assertIn(self.verification['html_url'], message)
+                if 'memory' in expected:
+                    self.assertIn("We're working towards supporting submissions that need more memory", message)
+                    self.assertIn('not a verdict', message)
+                    self.assertNotIn('fix it', message)
+
+    def test_feedback_requires_the_exact_repository_commit_pr_run_and_attempt(self):
+        result = {'status': 'failure', 'checks': [{'name': 'memory', 'status': 'failure'}], 'metadata': self.metadata}
+
+        def download(args, **kwargs):
+            self.assertIn('table-generation-submission-123-2', args)
+            (Path(args[args.index('--dir') + 1]) / 'table-generation-submission-result.json').write_text(json.dumps(result))
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(cli, 'run', side_effect=download):
+            self.assertEqual(cli.verification_feedback(self.verification, self.submission), result)
+            for key in self.metadata:
+                with self.subTest(key=key):
+                    result['metadata'] = dict(self.metadata, **{key: 'wrong'})
+                    self.assertIsNone(cli.verification_feedback(self.verification, self.submission))
+        with patch.object(cli, 'run', return_value=SimpleNamespace(returncode=1)):
+            self.assertIsNone(cli.verification_feedback(self.verification, self.submission))
+
+    def test_status_distinguishes_waiting_job_from_active_job(self):
+        pr = {'head': {'sha': self.submission['head'], 'repo': {'full_name': cli.REPO}},
+              'base': {'ref': 'main', 'repo': {'full_name': cli.REPO}}}
+        self.verification.update(status='in_progress', conclusion=None)
+        for state, expected in [('queued', 'Queued'), ('in_progress', 'Verifying')]:
+            responses = [pr, {'workflow_runs': [self.verification]},
+                         {'jobs': [{'name': 'Verify submission with Lean', 'status': state}]}]
+            with self.subTest(state=state), patch.object(cli, 'api', side_effect=responses) as api:
+                status = cli.inspect_status(self.submission, {})
+                self.assertTrue(status['stage'].startswith(expected))
+                self.assertEqual(api.call_args.args[0], 'actions/runs/123/attempts/2/jobs?per_page=100')
+
+    def test_status_uses_failed_attempt_diagnostics(self):
+        pr = {'head': {'sha': self.submission['head'], 'repo': {'full_name': cli.REPO}},
+              'base': {'ref': 'main', 'repo': {'full_name': cli.REPO}}}
+        feedback = {'status': 'failure', 'checks': [{'name': 'memory', 'status': 'failure'}]}
+        with patch.object(cli, 'api', side_effect=[pr, {'workflow_runs': [self.verification]}]), \
+                patch.object(cli, 'verification_feedback', return_value=feedback) as read:
+            with self.assertRaisesRegex(cli.UserError, 'Stopped: memory limit reached'):
+                cli.inspect_status(self.submission, {})
+            read.assert_called_once_with(self.verification, self.submission)
+
+
 class ToolchainSetup(unittest.TestCase):
     def test_existing_toolchain_is_reused_and_environment_is_pinned(self):
         with patch.object(cli, 'git', return_value='leanprover/lean4:v4.28.0'), \

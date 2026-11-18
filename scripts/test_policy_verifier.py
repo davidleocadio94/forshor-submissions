@@ -89,6 +89,16 @@ class PolicyVerifier(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(result["checks"][0]["status"], "failure")
 
+    def test_memory_stop_is_visible_in_the_result_and_run_summary(self):
+        self.write(PTP)
+        code, result = self.run_pv({"refused": True, "stage": "memory", "reason": "killed: memory 12.04 GB > cap 12.0 GB"})
+        self.assertEqual(code, 1)
+        self.assertEqual(result["checks"][-1]["name"], "memory")
+        summary = (self.out / "table-generation-summary.md").read_text()
+        self.assertIn("Stopped: memory limit reached", summary)
+        self.assertIn("This is not a verdict on your policy", summary)
+        self.assertIn("We're working towards supporting submissions that need more memory", summary)
+
     def test_the_trusted_environment_must_be_prepared(self):
         self.write(PP)
         code, result = self.run_pv(env={})

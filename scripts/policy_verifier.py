@@ -89,6 +89,9 @@ def summary_check(repo: Path, files: List[str]) -> Tuple[Dict[str, str], Optiona
 
 def summary(result: Dict[str, Any]) -> str:
     lines = [f"# Policy submission verification", "", f"Status: **{result['status'].upper()}**", ""]
+    if any(c["name"] == "memory" and c["status"] != "success" for c in result["checks"]):
+        lines += ["**Stopped: memory limit reached.** This is not a verdict on your policy.",
+                  "We're working towards supporting submissions that need more memory.", ""]
     pol = result.get("policy")
     if pol:
         lines += [f"Policy `{pol['digest'][:12]}`: {pol['mode']}, {pol['bands']} band(s). STO mirror: accepted. ForShor: "

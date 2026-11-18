@@ -65,7 +65,7 @@ for (const name of ['trees', 'verification', 'verifier exception']) test(`a fail
   assert.equal(c.outcome, 'incomplete'); assert.equal(c.cause, 'tool');
 });
 
-for (const stage of ['timeout', 'harness', 'killed', 'epoch']) test(`a ${stage} stage is a limit or infrastructure fault, not a rejection`, () => {
+for (const stage of ['harness', 'killed', 'epoch']) test(`a ${stage} stage is a limit or infrastructure fault, not a rejection`, () => {
   const c = notify.classify({ conclusion: 'failure', result: result(failed(stage, 'x')) });
   assert.equal(c.outcome, 'incomplete'); assert.equal(c.cause, 'limits');
 });
@@ -90,7 +90,7 @@ const body = (over = {}) => notify.buildComment({ outcome: 'rejected', login: 'c
 
 test('rejected: mentions the author, names the stage, shows the reason in one fence, says what to do and links the run', () => {
   const b = body();
-  assert.ok(b.startsWith(`<!-- forshor-notify:${HEAD}:rejected -->\n### Submission not accepted`));
+  assert.ok(b.startsWith(`<!-- forshor-notify:${HEAD}:rejected -->\n### Proof check failed`));
   assert.match(b, /@contributor, your policy did not pass verification for commit `aaaaaaa`/);
   assert.match(b, /\*\*What failed:\*\* ForShor's Lean build or policy check did not pass\./);
   assert.match(b, /```text\nerror: type mismatch\n```/);
@@ -170,23 +170,28 @@ async function inTemp(fn) {
   try { await fn(dir); } finally { process.chdir(root); fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-function world({ conclusion = 'failure', files = ['TableGeneration/Submission/Policy.lean'], associated = true, pull = {}, runOverride = {} } = {}) {
+function world({ conclusion = 'failure', files = ['TableGeneration/Submission/Policy.lean'], associated = true, pull = {}, runOverride = {}, action = 'completed', jobs = [] } = {}) {
   const outputs = {}, notices = [], warnings = [], infos = [];
-  const run = { id: 123, run_attempt: 1, event: 'pull_request', path: SOURCE, head_sha: HEAD, conclusion, ...runOverride };
+  const run = { id: 123, run_attempt: 1, event: 'pull_request', path: SOURCE, head_sha: HEAD, status: 'completed', conclusion, ...runOverride };
   const comments = fakeComments();
   const pr = { number: 7, state: 'open', merged: false, user: { login: 'contributor' }, head: { sha: HEAD }, base: { ref: 'main', repo: { full_name: REPO } }, ...pull };
   const github = {
     paginate: async (method, params) => method(params),
     rest: {
-      actions: { getWorkflowRunAttempt: async () => ({ data: run }) },
+      actions: { getWorkflowRunAttempt: async () => ({ data: run }), getWorkflowRun: async () => ({ data: run }),
+        listWorkflowRuns: async () => ({ data: { workflow_runs: [run] } }),
+        listJobsForWorkflowRunAttempt: async args => {
+          assert.equal(args.run_id, run.id); assert.equal(args.attempt_number, run.run_attempt);
+          return { data: { jobs } };
+        } },
       repos: { listPullRequestsAssociatedWithCommit: async () => (associated ? [{ number: 7, base: { ref: 'main' }, head: { sha: HEAD } }] : []) },
       pulls: { listFiles: async () => files.map(filename => ({ filename })), get: async () => ({ data: pr }) },
       issues: comments.github.rest.issues,
     },
   };
   const core = { setOutput: (k, v) => { outputs[k] = v; }, notice: m => notices.push(m), warning: m => warnings.push(m), info: m => infos.push(m) };
-  const context = { ...ctx, payload: { workflow_run: { id: 123, run_attempt: 1, event: 'pull_request', path: SOURCE, head_sha: HEAD, conclusion } } };
-  return { github, core, context, outputs, notices, warnings, infos, comments, run, pr };
+  const context = { ...ctx, payload: { action, workflow_run: { id: 123, run_attempt: 1, event: 'pull_request', path: SOURCE, head_sha: HEAD, conclusion } } };
+  return { github, core, context, outputs, notices, warnings, infos, comments, run, pr, jobs };
 }
 
 test('inspect: a failed run on a current pull request is bound to the API, and the artifact is worth fetching', () => inTemp(async () => {
@@ -198,8 +203,8 @@ test('inspect: a failed run on a current pull request is bound to the API, and t
     { run: { id: 123, run_attempt: 1, conclusion: 'failure' }, pr: { number: 7, headSha: HEAD }, author: 'contributor', refusal: null });
 }));
 
-test('inspect: success is the publisher\'s, skipped and action_required are not an outcome', () => inTemp(async () => {
-  for (const conclusion of ['success', 'skipped', 'action_required', 'neutral']) {
+test('inspect: skipped and action_required are not an outcome', () => inTemp(async () => {
+  for (const conclusion of ['skipped', 'action_required', 'neutral']) {
     const w = world({ conclusion }); await notify.inspect(w);
     assert.equal(w.outputs.process, 'false', conclusion); assert.ok(!fs.existsSync('notify-source.json'));
   }
@@ -248,7 +253,7 @@ test('post: a rejected policy is reported once, in place on a re-run, from the a
   await notify.post(w); await notify.post(w);
   assert.deepEqual(w.comments.calls, ['create']);
   const b = w.comments.comments[0].body;
-  assert.match(b, /### Submission not accepted/); assert.match(b, /@contributor, your policy did not pass/); assert.match(b, /ForShor's build of the policy template failed/);
+  assert.match(b, /### Proof check failed/); assert.match(b, /@contributor, your policy did not pass/); assert.match(b, /ForShor's build of the policy template failed/);
   assert.ok(b.includes(RUN_URL));
 }));
 
@@ -282,7 +287,7 @@ test('the dry-run command prints the comment and posts nothing', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'forshor-notify-dry-'));
   fs.writeFileSync(path.join(dir, 'table-generation-submission-result.json'), JSON.stringify(result(failed('cert', 'the kernel said no'))));
   const out = require('node:child_process').execFileSync('node', [path.join(__dirname, 'ci/notify_submitters.js'), '--dry-run', `--dir=${dir}`, '--login=contributor', `--sha=${HEAD}`, '--run-id=123'], { encoding: 'utf8' });
-  assert.match(out, /### Submission not accepted/); assert.match(out, /the kernel said no/);
+  assert.match(out, /### Proof check failed/); assert.match(out, /the kernel said no/);
   assert.throws(() => require('node:child_process').execFileSync('node', [path.join(__dirname, 'ci/notify_submitters.js')], { stdio: 'pipe' }));
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -305,7 +310,7 @@ test('the workflow runs trusted main, never the submission, and treats the artif
   const checkouts = [...code.matchAll(/uses: actions\/checkout@[0-9a-f]{40}\n        with:\n([\s\S]*?)(?=\n      - name:|\n$)/g)];
   assert.equal(checkouts.length, 1, 'one checkout');
   assert.match(checkouts[0][1], /ref: main/); assert.match(checkouts[0][1], /persist-credentials: false/);
-  assert.doesNotMatch(code, /workflow_run\.head_(sha|branch|repository)|pull_request\.head|github\.head_ref|refs\/pull/);
+  assert.doesNotMatch(checkouts[0][1], /workflow_run\.head_(sha|branch|repository)|pull_request\.head|github\.head_ref|refs\/pull/);
   assert.match(code, /name: \$\{\{ steps\.source\.outputs\.artifact \}\}/); assert.match(code, /run-id: \$\{\{ github\.event\.workflow_run\.id \}\}/);
   for (const step of code.split('\n      - name: ').slice(1)) {
     if (/^\s*run:/m.test(step) || /\n        run:/.test(step)) assert.doesNotMatch(step, /\$\{\{\s*github\.event\./, 'no event field is interpolated into a shell command');
@@ -314,11 +319,13 @@ test('the workflow runs trusted main, never the submission, and treats the artif
   assert.doesNotMatch(code, /(?:python3?|node|sh|bash) +artifacts\//, 'nothing from the artifact is executed');
 });
 
-test('the workflow reports only unsuccessful pull-request verifications of the policy submission workflow', () => {
-  assert.match(code, /workflows: \[Policy submission\]/); assert.match(code, /types: \[completed\]/);
+test('the workflow reports progress and completed pull-request verifications of the policy submission workflow', () => {
+  assert.match(code, /workflows: \[Policy submission\]/); assert.match(code, /types: \[requested, in_progress, completed\]/);
   assert.match(code, /workflow_run\.event == 'pull_request'/);
-  assert.match(code, /\["failure","timed_out","cancelled","startup_failure"\]/);
-  assert.doesNotMatch(code, /"success"/);
+  assert.match(code, /github\.event\.action != 'completed'/);
+  assert.match(code, /\["success","failure","timed_out","cancelled","startup_failure"\]/);
+  assert.match(code, /group: forshor-notify-\$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(code, /cancel-in-progress: false/);
 });
 
 test('the publisher still runs this module\'s tests and keeps its own boundaries', () => {
@@ -376,4 +383,108 @@ test('inspect: a policy with its summary.tex is an ordinary submission pull requ
   await notify.inspect(w);
   assert.equal(w.outputs.process, 'true'); assert.equal(w.outputs.download, 'true');
   assert.equal(JSON.parse(fs.readFileSync('notify-source.json', 'utf8')).refusal, null);
+}));
+
+test('memory and time guard stops, including old replay/cert diagnostics, never say to fix a proof', () => {
+  for (const [stage, details, cause] of [
+    ['memory', 'killed: memory 12.04 GB > cap 12.0 GB', 'memory'],
+    ['replay', 'kernel replay failed: killed: memory 10.14 GB > cap 10.0 GB', 'memory'],
+    ['cert', 'killed: memory 12.04 GiB > cap 12.0 GiB', 'memory'],
+    ['timeout', 'the stage exceeded its deadline', 'timed_out'],
+    ['replay', 'killed: timeout 900 s', 'timed_out'],
+  ]) {
+    const verdict = notify.classify({ conclusion: 'failure', result: result(failed(stage, details)) });
+    assert.equal(verdict.outcome, 'incomplete'); assert.equal(verdict.cause, cause);
+    const b = body(verdict);
+    assert.match(b, /not a verdict on your policy/);
+    assert.doesNotMatch(b, /Proof check failed|Submission not accepted|Fix the problem/);
+    if (cause === 'memory') {
+      assert.match(b, /### Stopped: memory limit reached/);
+      assert.match(b, /We're working towards supporting submissions that need more memory/);
+      assert.match(b, /maintainer can retry/);
+    } else assert.match(b, /### Stopped: time limit reached/);
+  }
+});
+
+test('queued, verifying and verified update one comment; progress uses job status, never an artifact', () => inTemp(async () => {
+  const w = world({ conclusion: null, action: 'requested', runOverride: { status: 'queued' } });
+  fs.mkdirSync('artifacts');
+  fs.writeFileSync('artifacts/table-generation-submission-result.json', JSON.stringify(result(failed('forshor', 'unrelated proof failure'))));
+  await notify.inspect(w); await notify.post(w);
+  assert.equal(w.outputs.download, 'false');
+  assert.match(w.comments.comments[0].body, /### Queued — waiting for verification/);
+  // A workflow marked in_progress can still have its verification job queued.
+  w.context.payload.action = 'in_progress'; w.run.status = 'in_progress';
+  w.jobs.push({ name: 'Verify submission with Lean', status: 'queued' });
+  await notify.inspect(w); await notify.post(w);
+  assert.match(w.comments.comments[0].body, /### Queued/);
+  w.jobs[0].status = 'in_progress';
+  await notify.inspect(w); await notify.post(w);
+  assert.match(w.comments.comments[0].body, /### Verifying/);
+  w.run.status = 'completed'; w.run.conclusion = 'success';
+  w.context.payload.action = 'completed'; w.context.payload.workflow_run.conclusion = 'success';
+  await notify.inspect(w); await notify.post(w);
+  assert.equal(w.outputs.download, 'false');
+  assert.equal(w.comments.comments.length, 1);
+  const b = w.comments.comments[0].body;
+  assert.match(b, /### Verification passed/);
+  assert.match(b, /check on this PR for publication status/);
+  assert.doesNotMatch(b, /unrelated proof failure|### Submission accepted/);
+  assert.ok(b.startsWith(notify.statusMarkerOf(HEAD)));
+}));
+
+test('a queued comment becomes a memory stop in the same comment', () => inTemp(async () => {
+  const w = world({ conclusion: null, action: 'requested', runOverride: { status: 'queued' } });
+  await notify.inspect(w); await notify.post(w);
+  w.run.status = 'completed'; w.run.conclusion = 'failure';
+  w.context.payload.action = 'completed'; w.context.payload.workflow_run.conclusion = 'failure';
+  fs.mkdirSync('artifacts');
+  fs.writeFileSync('artifacts/table-generation-submission-result.json', JSON.stringify(result(failed('memory', 'killed: memory 12.04 GB > cap 12.0 GB'))));
+  await notify.inspect(w); await notify.post(w);
+  assert.equal(w.comments.comments.length, 1);
+  assert.match(w.comments.comments[0].body, /### Stopped: memory limit reached/);
+  assert.match(w.comments.comments[0].body, /12.04 GB/);
+}));
+
+test('delayed events use current progress and never overwrite a completed status with queued', () => inTemp(async () => {
+  const w = world({ conclusion: null, action: 'requested', runOverride: { status: 'queued' } });
+  await notify.inspect(w);
+  w.run.status = 'in_progress'; w.jobs.push({ name: 'Verify submission with Lean', status: 'in_progress' });
+  await notify.post(w);
+  assert.match(w.comments.comments[0].body, /### Verifying/);
+  w.run.status = 'completed'; w.run.conclusion = 'success';
+  await notify.post(w);
+  assert.equal(w.comments.calls.length, 1, 'an already inspected progress event cannot overwrite a terminal result');
+  await notify.inspect(w); await notify.post(w);
+  assert.match(w.comments.comments[0].body, /### Verification passed/, 'an old event inspected late reads current state');
+}));
+
+test('post rechecks attempt, PR head and workflow identity after inspection', () => inTemp(async () => {
+  for (const alter of [w => w.run.run_attempt++, w => { w.pr.head.sha = OTHER; }, w => { w.pr.state = 'closed'; },
+    w => { w.run.path = '.github/workflows/other.yml'; }, w => { w.run.event = 'push'; }]) {
+    const w = world(); await notify.inspect(w); alter(w); await notify.post(w);
+    assert.equal(w.comments.calls.length, 0);
+  }
+}));
+
+test('an older run for the same commit cannot overwrite the newer run status', () => inTemp(async () => {
+  const w = world(); await notify.inspect(w);
+  w.github.rest.actions.listWorkflowRuns = async () => ({ data: { workflow_runs: [{ ...w.run, id: 124 }] } });
+  await notify.post(w);
+  assert.equal(w.comments.calls.length, 0);
+}));
+
+test('verified status can finish an existing comment after publication closes the PR, but never creates one on a closed PR', () => inTemp(async () => {
+  const w = world({ conclusion: 'success' });
+  await notify.inspect(w); await notify.post(w);
+  const publication = { id: 99, body: `<!-- forshor-publication:${HEAD} -->\nPublished`, user: { login: 'github-actions[bot]' } };
+  w.comments.comments.push(publication);
+  w.comments.comments[0].body = `${notify.statusMarkerOf(HEAD)}\nQueued`;
+  w.pr.state = 'closed';
+  await notify.inspect(w); await notify.post(w);
+  assert.match(w.comments.comments[0].body, /### Verification passed/);
+  assert.equal(w.comments.comments[1], publication, 'publisher comment is independent');
+  const closed = world({ conclusion: 'success', pull: { state: 'closed' } });
+  await notify.inspect(closed); await notify.post(closed);
+  assert.equal(closed.comments.calls.length, 0);
 }));

@@ -56,6 +56,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
+from memcap import limit_rejection  # noqa: E402
 from policy_json_to_lean import PolicyError, negation_of  # noqa: E402
 from ptp_policy_json_to_lean import render  # noqa: E402
 import ptp_exact_width  # noqa: E402
@@ -180,8 +181,17 @@ def run(cmd, timeout):
 
 
 def capped(cmd, cap, timeout, log):
-    return run([sys.executable, str(ROOT / "scripts" / "memcap.py"), "--cap-gb", str(cap), "--timeout",
-                str(timeout), "--log", str(log), "--", *cmd], timeout + 60)
+    p, seconds = run([sys.executable, str(ROOT / "scripts" / "memcap.py"), "--cap-gb", str(cap), "--timeout",
+                      str(timeout), "--log", str(log), "--", *cmd], timeout + 60)
+    if p.returncode:
+        try:
+            memory = json.loads(log.read_text())
+        except (OSError, ValueError):
+            memory = {}
+        stopped = limit_rejection(memory)
+        if stopped:
+            raise Reject(*stopped, json.dumps(memory))
+    return p, seconds
 
 
 def norm(s):

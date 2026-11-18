@@ -14,6 +14,17 @@ from pathlib import Path
 UNITS = {"B": 1, "K": 1 << 10, "M": 1 << 20, "G": 1 << 30}
 
 
+def limit_rejection(record):
+    """Identify a guard termination from its record, never from compiler output."""
+    if not isinstance(record, dict):
+        return None
+    outcome = record.get("outcome", "")
+    for stage, prefix in (("memory", "killed: memory "), ("timeout", "killed: timeout ")):
+        if isinstance(outcome, str) and outcome.startswith(prefix):
+            return stage, outcome
+    return None
+
+
 def tree(pid):
     out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True).stdout
     kids = {}

@@ -96,12 +96,25 @@ The CLI therefore matches trusted publication diagnostics against the exact
 verifier run ID, attempt, PR number, and submitted SHA. An unrelated success or
 a successful job without a publication receipt is never reported as your result.
 
-You are told how it ended. When verification finishes the PR gets a comment that mentions the PR's author, so GitHub notifies them
-(web, email or mobile, as their notification settings say): **accepted and published** (the publisher's comment, with the row name and a "Cite this submission" section: the policy digest, the submission commit, the snapshot it was published in, and a ready citation and BibTeX entry; a DOI is assigned when accepted submissions are deposited after the challenge closes),
-**not accepted** (the check that failed, in plain words, and the verifier's message), or **could not complete** (a tool, a limit or the
-runner failed, or the run was cancelled: this is not a verdict on the policy, and nothing needs to change on your side). There is one
-comment per commit and outcome, updated in place on a re-run. The *Notify Submitters* workflow posts "not accepted" and
-"could not complete"; the publisher posts "accepted" and reports a publication failure that happens after Lean passed.
+The PR has one verification status comment per commit, updated in place by *Notify Submitters*:
+**Queued — waiting for verification**, **Verifying**, then **Verification passed**, **Proof check failed**,
+or the reason verification stopped. File and format rule failures say **Submission not accepted**.
+Passing verification does not mean publication succeeded: follow the publication check for that next step.
+`./forshor status --watch` also distinguishes a waiting verification job from one that has started.
+Neither view estimates a queue position or waiting time. Comments follow GitHub's workflow events;
+GitHub does not emit `requested` for reruns, so use the CLI or the run page while a rerun is queued.
+Its comment updates again when the rerun starts or finishes. New comments mention the author;
+GitHub notification delivery depends on their settings, and comment edits should not be relied on for a new notification.
+
+**Stopped: memory limit reached** means the check exceeded available verification capacity, not that the policy is invalid.
+The PR comment, CLI and run summary say: **We're working towards supporting submissions that need more memory.**
+A maintainer can retry when more capacity is available. The contributor does not need to rewrite their policy solely because of this message.
+Time limits likewise report **Stopped: time limit reached**. If the runner dies without uploading diagnostics, the message remains
+**Verification could not complete**; an absent result is not enough to diagnose memory exhaustion.
+
+The publisher posts its own **accepted and published** comment with the row name and a "Cite this submission" section:
+the policy digest, submission commit, snapshot, ready citation and BibTeX entry. A DOI is assigned when accepted submissions
+are deposited after the challenge closes. Publication failures after Lean passes are reported separately.
 
 If Lean rejects a submission, open the printed verification URL, fix the source,
 and run `./forshor submit` again. If publication fails after Lean passes, open

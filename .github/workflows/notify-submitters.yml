@@ -1,8 +1,8 @@
 name: Notify Submitters
 
-# Tells a submission's author, by a pull-request comment that mentions them, when their verification ended WITHOUT being accepted:
+# Updates one PR status comment as verification is queued, runs and finishes:
 # rejected (the verifier gave a verdict on the policy) or could not complete (a tool, a limit or the runner: not a verdict).
-# An accepted submission is reported by Publish Verified Results after publication, so `success` is not handled here.
+# A successful verification is distinct from the publisher's accepted-and-published comment.
 #
 # Like the publisher this runs from trusted main (workflow_run), never checks out or executes the submission, treats the verifier's
 # artifact as data, and takes the pull request, its head commit and its author from the API. Unlike the publisher it has no secret,
@@ -10,18 +10,19 @@ name: Notify Submitters
 on:
   workflow_run:
     workflows: [Policy submission]
-    types: [completed]
+    types: [requested, in_progress, completed]
 permissions: {}
 jobs:
   notify:
     if: >-
       github.event.workflow_run.event == 'pull_request'
-      && contains(fromJSON('["failure","timed_out","cancelled","startup_failure"]'), github.event.workflow_run.conclusion)
+      && (github.event.action != 'completed' || contains(fromJSON('["success","failure","timed_out","cancelled","startup_failure"]'), github.event.workflow_run.conclusion))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
-      group: forshor-notify-${{ github.event.workflow_run.id }}
+      group: forshor-notify-${{ github.event.workflow_run.head_sha }}
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       actions: read

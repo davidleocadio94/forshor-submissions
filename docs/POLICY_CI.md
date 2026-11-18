@@ -18,6 +18,12 @@ The verification job is bounded to 60 minutes in total, including setup, ForShor
 
 The shared policy intake gives each mirror replay stage a 12 GiB process-tree memory cap, including checks run locally and any replay during publication. The hosted public-repository Linux runner has 16 GB RAM; the cap leaves headroom for the rest of the job. Replay diagnostics include peak usage, platform, architecture, accounting method and process count at the peak. Linux sums resident and swapped memory; macOS uses `top`'s resident-plus-compressed measure, so cross-platform peaks are not directly equivalent. A policy stopped at the cap has not received a mathematical rejection. Investigate another cap hit before raising it further.
 
+Guard stops carry an explicit `memory` or `timeout` stage through the mirror and verifier result,
+including PhaseTripleProduct compilation stops whose compiler output may be truncated.
+The PR comment and CLI distinguish these from proof failures. The memory message says
+**We're working towards supporting submissions that need more memory.** See [CLI.md](CLI.md)
+for queue status and notification behavior.
+
 ## Source restrictions before compilation
 
 The trusted `scripts/ci/policy_source.py` filter runs before dependency setup or

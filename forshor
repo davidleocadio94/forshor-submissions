@@ -489,9 +489,49 @@ def publication_result(run_record, source, result, submission, verification):
     return outcome
 
 
-def hosted_failure(verification):
+def verification_feedback(verification, submission):
+    """Read a failed attempt's JSON as data; never execute artifact contents."""
+    try:
+        with tempfile.TemporaryDirectory(prefix='forshor-verification-') as directory:
+            downloaded = run(['gh', 'run', 'download', str(verification['id']), '--repo', REPO,
+                              '--name', f'table-generation-submission-{verification["id"]}-{verification["run_attempt"]}',
+                              '--dir', directory], check=False)
+            path = Path(directory) / 'table-generation-submission-result.json'
+            if downloaded.returncode or not path.is_file() or path.stat().st_size > 1_000_000:
+                return None
+            result = json.loads(path.read_text())
+            if not isinstance(result, dict):
+                return None
+            metadata = result.get('metadata')
+            expected = {'repository': REPO, 'head_sha': submission['head'], 'pr_number': str(submission['pr']),
+                        'run_id': str(verification['id']), 'run_attempt': str(verification['run_attempt'])}
+            if not isinstance(metadata, dict) or any(str(metadata.get(k, '')) != v for k, v in expected.items()):
+                return None
+            return result
+    except (OSError, ValueError):
+        return None  # Missing diagnostics must not conceal the failed verification.
+
+
+def hosted_failure(verification, result=None):
     """Why a hosted verification did not pass. The conclusion alone cannot say whose fault it is, so do not blame the submission."""
-    return (f'The hosted Lean verification did not pass ({verification["conclusion"]}). Details: {verification["html_url"]}\n'
+    details_url = f'Details: {verification["html_url"]}'
+    if verification['conclusion'] == 'timed_out':
+        return f'Stopped: time limit reached. This is not a verdict on your policy. {details_url}'
+    if verification['conclusion'] == 'action_required':
+        return f'Waiting for a maintainer to approve the GitHub Actions run. {details_url}'
+    if isinstance(result, dict) and result.get('status') == 'failure' and isinstance(result.get('checks'), list):
+        failed = next((c for c in result['checks'] if isinstance(c, dict) and c.get('status') != 'success'), None)
+        if failed and verification['conclusion'] == 'failure':
+            name, detail = failed.get('name'), str(failed.get('details', ''))
+            if name == 'memory' or re.search(r'killed: memory [\d.]+ G(?:i)?B > cap [\d.]+ G(?:i)?B', detail):
+                return ('Stopped: memory limit reached. This is not a verdict on your policy.\n'
+                        "We're working towards supporting submissions that need more memory. "
+                        f'A maintainer can retry verification when more capacity is available. {details_url}')
+            if name == 'timeout' or re.search(r'killed: timeout [\d.]+ s', detail):
+                return f'Stopped: time limit reached. This is not a verdict on your policy. {details_url}'
+            if name in {'forshor', 'check', 'threshold', 'widths', 'cert', 'replay', 'audit', 'mirror', 'axiom dependencies'}:
+                return f'Proof check failed. Open the run summary for the failed check and its details. {details_url}'
+    return (f'The hosted Lean verification did not pass ({verification["conclusion"]}). {details_url}\n'
             'Open the run summary: it names the check that failed. If that is the hosted environment (for example `trees`: the runner has no '
             'prepared Lean trees), the cause is the hosted setup and not your policy; `./forshor check` verifies the same file locally. '
             'If it names your policy, fix it and run ./forshor submit again.')
@@ -503,12 +543,16 @@ def inspect_status(submission, inspected):
     verifiers = api(f'actions/workflows/table-generation-submission.yml/runs?head_sha={submission["head"]}&event=pull_request&per_page=100')['workflow_runs']
     verifiers = [r for r in verifiers if r['path'] == VERIFIER and r['event'] == 'pull_request']
     if not verifiers:
-        return {'stage': 'waiting for Lean verification', 'pr': submission['url']}
+        return {'stage': 'Queued — waiting for verification', 'pr': submission['url']}
     verification = max(verifiers, key=lambda r: (r['id'], r['run_attempt']))
     if verification['status'] != 'completed':
-        return {'stage': 'Lean verification ' + verification['status'], 'verification': verification['html_url']}
+        jobs = api(f'actions/runs/{verification["id"]}/attempts/{verification["run_attempt"]}/jobs?per_page=100')['jobs']
+        running = any(j['name'] == 'Verify submission with Lean' and j['status'] == 'in_progress' for j in jobs)
+        return {'stage': 'Verifying — preparing and checking your submission' if running else 'Queued — waiting for verification',
+                'verification': verification['html_url']}
     if verification['conclusion'] != 'success':
-        raise UserError(hosted_failure(verification))
+        result = verification_feedback(verification, submission) if verification['conclusion'] == 'failure' else None
+        raise UserError(hosted_failure(verification, result))
     # Publisher workflow head SHA is main, never the submitted SHA. Match its
     # trusted diagnostics to the exact verifier ID/attempt, PR and source commit.
     from urllib.parse import urlencode
