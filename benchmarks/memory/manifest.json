@@ -112,6 +112,17 @@
       "variant": "heavy",
       "description": "48 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
       "band_count": 48
+    },
+    "ptp-b24": {
+      "base_policy": "cases/pr109.json",
+      "base_source": "cases/pr109.lean",
+      "base_source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7",
+      "base_policy_digest": "65073a449e01305f41efa1772788ded6656c94b46c9c5cf294fdf90adcbab2a5",
+      "pr_head": "23b412bba70f2ade71f899243b0fc08273dd38ca",
+      "kind": "ptp",
+      "variant": "heavy",
+      "description": "24 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
+      "band_count": 24
     }
   }
 }
