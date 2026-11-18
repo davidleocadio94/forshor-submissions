@@ -23,8 +23,8 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix:
-        case: [pp-b16, ptp-b16, pp-b64, ptp-b64, pp-b128, ptp-b128]
-        repeat: [1]
+        case: [pp-b32, ptp-b32, pp-b48, ptp-b48]
+        repeat: [1, 2, 3]
     steps:
       - name: Record benchmark start
         run: echo "BENCH_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
