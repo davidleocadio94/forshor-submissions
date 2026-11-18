@@ -1,0 +1,73 @@
+{
+  "verifier_commit": "640522c5360b21aa80bdc121c5e697a9c9b25832",
+  "forshor_commit": "349849e091fc05a4e80c99ae3511985faf3b8843",
+  "expected_epoch": "ab1f8887b1b50e56",
+  "cases": {
+    "pp-b16": {
+      "base_policy": "cases/pr107.json",
+      "base_source": "cases/pr107.lean",
+      "base_source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72",
+      "base_policy_digest": "6464cccd6636c9d55d0934aec0ccb158b1632787f9f7779cb7772f3bcf67afb6",
+      "pr_head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360",
+      "kind": "pp",
+      "variant": "heavy",
+      "description": "16 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
+      "band_count": 16
+    },
+    "pp-b64": {
+      "base_policy": "cases/pr107.json",
+      "base_source": "cases/pr107.lean",
+      "base_source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72",
+      "base_policy_digest": "6464cccd6636c9d55d0934aec0ccb158b1632787f9f7779cb7772f3bcf67afb6",
+      "pr_head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360",
+      "kind": "pp",
+      "variant": "heavy",
+      "description": "64 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
+      "band_count": 64
+    },
+    "pp-b128": {
+      "base_policy": "cases/pr107.json",
+      "base_source": "cases/pr107.lean",
+      "base_source_sha256": "be223b13a5775d0dbd6a7343c08b46d79da318fad7a2205ab98dbd1d4a355a72",
+      "base_policy_digest": "6464cccd6636c9d55d0934aec0ccb158b1632787f9f7779cb7772f3bcf67afb6",
+      "pr_head": "1f05d77cfbd3406be8d3547e9b6b1a7bb8faa360",
+      "kind": "pp",
+      "variant": "heavy",
+      "description": "128 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
+      "band_count": 128
+    },
+    "ptp-b16": {
+      "base_policy": "cases/pr109.json",
+      "base_source": "cases/pr109.lean",
+      "base_source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7",
+      "base_policy_digest": "65073a449e01305f41efa1772788ded6656c94b46c9c5cf294fdf90adcbab2a5",
+      "pr_head": "23b412bba70f2ade71f899243b0fc08273dd38ca",
+      "kind": "ptp",
+      "variant": "heavy",
+      "description": "16 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
+      "band_count": 16
+    },
+    "ptp-b64": {
+      "base_policy": "cases/pr109.json",
+      "base_source": "cases/pr109.lean",
+      "base_source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7",
+      "base_policy_digest": "65073a449e01305f41efa1772788ded6656c94b46c9c5cf294fdf90adcbab2a5",
+      "pr_head": "23b412bba70f2ade71f899243b0fc08273dd38ca",
+      "kind": "ptp",
+      "variant": "heavy",
+      "description": "64 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
+      "band_count": 64
+    },
+    "ptp-b128": {
+      "base_policy": "cases/pr109.json",
+      "base_source": "cases/pr109.lean",
+      "base_source_sha256": "101b1ec96a264db3fa1aaa07e143efe96c4e29f09ec5b9ca90e2092b63b464d7",
+      "base_policy_digest": "65073a449e01305f41efa1772788ded6656c94b46c9c5cf294fdf90adcbab2a5",
+      "pr_head": "23b412bba70f2ade71f899243b0fc08273dd38ca",
+      "kind": "ptp",
+      "variant": "heavy",
+      "description": "128 bands; same k=8 top and k=4 fallback tables, unchanged dispatch at every width; normal generated sorting proof",
+      "band_count": 128
+    }
+  }
+}

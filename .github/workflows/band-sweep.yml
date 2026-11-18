@@ -1,0 +1,86 @@
+name: MIS-195 band sweep
+
+on:
+  push:
+    branches: [bench/mis-195-band-sweep-20261117]
+    paths:
+      - '.github/workflows/band-sweep.yml'
+      - 'benchmarks/memory/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mis195-band-sweep
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    name: '${{ matrix.case }} / repeat ${{ matrix.repeat }}'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        case: [pp-b16, ptp-b16, pp-b64, ptp-b64, pp-b128, ptp-b128]
+        repeat: [1]
+    steps:
+      - name: Record benchmark start
+        run: echo "BENCH_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: benchmark
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 640522c5360b21aa80bdc121c5e697a9c9b25832
+          path: verifier
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned Lean
+        working-directory: verifier
+        run: ./scripts/ci/install_lean.sh
+      - name: Restore production engine environment
+        uses: ./verifier/.github/actions/policy-engine-environment
+        with:
+          source: verifier
+      - name: Prepare production Lean checkers and swap
+        uses: ./verifier/.github/actions/policy-lean-environment
+      - name: Prepare fixed policy and check source
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          "$ENGINE_PYTHON" benchmark/benchmarks/memory/prepare.py --case "$CASE" --verifier verifier --out results
+          python3 verifier/scripts/ci/policy_source.py results/Policy.lean
+      - name: Observe unchanged verification without publishing
+        working-directory: verifier
+        env:
+          LEAN_NUM_THREADS: '1'
+          POLICY_STAGE_TIMEOUT: '900'
+          POLICY_MIRROR_TIMEOUT: '600'
+        run: |
+          set -euo pipefail
+          unset PUBLISHER_URL PUBLISHER_TOKEN GH_TOKEN GITHUB_TOKEN
+          python3 ../benchmark/benchmarks/memory/observe.py --out "$GITHUB_WORKSPACE/results" \
+            --deadline-seconds "$(( 3600 - ($(date +%s) - BENCH_START_EPOCH) - 90 ))" -- \
+            "$ENGINE_PYTHON" evaluation/intake_v2.py \
+            --lean-policy "$GITHUB_WORKSPACE/results/Policy.lean" --login memory-benchmark --no-publish \
+            --tree "$STO_TREE" --forshor-tree "$FORSHOR_TREE" \
+            --workdir "$GITHUB_WORKSPACE/results/work" --verification-out "$GITHUB_WORKSPACE/results/verification.json" \
+            --out "$GITHUB_WORKSPACE/results/intake-result.json" --stage-timeout 900 --mirror-timeout 600 \
+            2>&1 | tee "$GITHUB_WORKSPACE/results/verification-console.log"
+      - name: Collect diagnostic files
+        if: always()
+        run: python3 benchmark/benchmarks/memory/collect.py results
+      - name: Retain benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bandsweep-${{ matrix.case }}-r${{ matrix.repeat }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            results/
+            !results/work/**
+            policy-bootstrap.json
